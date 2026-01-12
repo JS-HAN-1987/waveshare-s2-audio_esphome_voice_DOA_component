@@ -1,0 +1,46 @@
+substitutions:
+  # ... existing substitutions ...
+  device_name: esp32-voice
+
+esphome:
+  name: $device_name
+
+# Add the local component
+external_components:
+  - source:
+      type: local
+      path: esphome_component
+    components: [ esp_sr_doa ]
+
+# ... existing i2s_audio config ...
+i2s_audio:
+  - id: i2s_input
+    i2s_lrclk_pin: GPIO14
+    i2s_bclk_pin: GPIO13
+    
+# ... existing microphone config ...
+
+# Configure the ESP-SR DOA Component
+esp_sr_doa:
+  id: esp_doa_component
+  mic_i2s_id: i2s_input
+  
+  # Binary sensor for Wake Word detection provided by ESP-SR (WakeNet)
+  # Note: This runs ALONGSIDE or INSTEAD of micro_wake_word.
+  # If you want to use ESP-SR as the main wake word engine, use this.
+  wake_word_sensor:
+    name: "ESP-SR Wake Word"
+    on_press:
+      - logger.log: "Wake Word Detected by ESP-SR!"
+      
+  # Sensor for Direction of Arrival (DOA)
+  doa_sensor:
+    name: "Speaker Direction"
+    on_value:
+      - logger.log: 
+          format: "DOA Angle: %.1f"
+          args: [ 'x' ]
+
+  # Text sensor for Command (MultiNet) - Optional
+  command_sensor:
+    name: "ESP-SR Command"

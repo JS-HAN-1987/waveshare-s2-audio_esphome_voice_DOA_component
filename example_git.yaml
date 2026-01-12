@@ -1,0 +1,49 @@
+substitutions:
+  name: esp32-voice-demo
+  friendly_name: ESP32 Voice Demo
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  min_version: 2024.6.0
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+# External Component via Git
+external_components:
+  - source:
+      type: git
+      url: https://github.com/JS-HAN-1987/waveshare-s2-audio_esphome_voice_DOA_component
+      ref: main
+    components: [ esp_sr_doa ]
+
+i2s_audio:
+  - id: i2s_input
+    i2s_lrclk_pin: GPIO14
+    i2s_bclk_pin: GPIO13
+
+microphone:
+  - platform: i2s_audio
+    id: i2s_mics
+    i2s_din_pin: GPIO15
+    adc_type: external
+    pdm: false
+    i2s_audio_id: i2s_input
+    
+# Component Configuration
+esp_sr_doa:
+  id: esp_doa
+  mic_i2s_id: i2s_input
+  wake_word_sensor:
+    name: "Wake Word Detected"
+  doa_sensor:
+    name: "Sound Direction"
+    
+logger:
+api:
+ota:
+wifi:
+  # ... configure wifi ...
