@@ -113,6 +113,8 @@ void ESPSRDOA::loop() {}
 
 void ESPSRDOA::dump_config() {
   ESP_LOGCONFIG(TAG, "ESP-SR DOA:");
+  ESP_LOGCONFIG(TAG, "  Version: v2.1.2");
+  ESP_LOGCONFIG(TAG, "  Build: %s %s", __DATE__, __TIME__);
   LOG_SENSOR("  ", "DOA", this->doa_sensor_);
 }
 
