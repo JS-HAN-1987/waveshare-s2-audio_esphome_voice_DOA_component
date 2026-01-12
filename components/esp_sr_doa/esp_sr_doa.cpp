@@ -58,7 +58,11 @@ const char *get_reset_reason_str(esp_reset_reason_t reason) {
 
 void ESPSRDOA::setup() {
   ESP_LOGI(TAG, "========================================");
-  ESP_LOGI(TAG, "ESP-SR DOA Component Setup Starting");
+  ESP_LOGI(TAG, "ESP-SR DOA Component v2.1.0");
+  ESP_LOGI(TAG, "Build Date: %s %s", __DATE__, __TIME__);
+  ESP_LOGI(
+      TAG,
+      "Features: Crash diagnostics, Memory monitoring, Reset reason logging");
   ESP_LOGI(TAG, "========================================");
 
 #ifdef USE_ESP32
