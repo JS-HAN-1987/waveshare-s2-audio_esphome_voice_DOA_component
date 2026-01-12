@@ -6,10 +6,12 @@
 #include <cmath>
 #include <cstring>
 
-
 // ESP32-specific headers for crashdiagnostics
 #ifdef USE_ESP32
+#include "esp_err.h" // Needed for esp_err_t, ESP_OK
 #include "esp_system.h"
+#include "sdkconfig.h" // Needed for CONFIG_DSP_MAX_FFT_SIZE
+
 // Note: Do NOT include esp_log.h - it conflicts with ESPHome's logging
 // ESPHome's ESP_LOG* macros from esphome/core/log.h are used instead
 #endif
