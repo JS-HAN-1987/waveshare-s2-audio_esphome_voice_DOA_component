@@ -5,7 +5,6 @@
 #include <complex>
 #include <vector>
 
-
 namespace esphome {
 namespace esp_sr_doa {
 
@@ -33,9 +32,9 @@ protected:
   size_t buffer_pos_{0};
 
   // FFT Buffers
-  float fft_input_left_[FFT_N];
-  float fft_input_right_[FFT_N];
-  float fft_out_left_[FFT_N * 2]; // Complex: Real, Imag interleaved
+  float fft_input_left_[FFT_N * 2];  // Complex: Real, Imag interleaved
+  float fft_input_right_[FFT_N * 2]; // Complex: Real, Imag interleaved
+  float fft_out_left_[FFT_N * 2];
   float fft_out_right_[FFT_N * 2];
   float window_[FFT_N];
 
