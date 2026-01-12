@@ -29,9 +29,9 @@ async def to_code(config):
         sens = await sensor.new_sensor(config[CONF_DOA_SENSOR])
         cg.add(var.set_doa_sensor(sens))
 
-    # Add ESP-SR as an IDF component (DOA functions only)
+    # Add ESP-DSP for FFT hardware acceleration
     add_idf_component(
-        name="esp-sr",
-        repo="https://github.com/espressif/esp-sr.git",
+        name="esp-dsp",
+        repo="https://github.com/espressif/esp-dsp.git",
         ref="master",
     )
