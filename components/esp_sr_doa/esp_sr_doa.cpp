@@ -4,11 +4,12 @@
 #include "esphome/core/log.h"
 #include <cstring>
 
-// ESP32-specific headers for crash diagnostics
+// ESP32-specific headers for crashdiagnostics
 #ifdef USE_ESP32
-#include "esp_err.h"
-#include "esp_log.h"
 #include "esp_system.h"
+// Note: Do NOT include esp_log.h - it conflicts with ESPHome's logging
+// ESPHome's ESP_LOG* macros from esphome/core/log.h are used instead
+#endif
 
 #endif
 
