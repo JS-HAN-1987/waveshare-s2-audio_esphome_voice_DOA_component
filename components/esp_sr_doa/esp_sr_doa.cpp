@@ -55,6 +55,14 @@ const char *get_reset_reason_str(esp_reset_reason_t reason) {
 }
 #endif
 
+ESPSRDOA::~ESPSRDOA() {
+  if (this->doa_handle_) {
+    ESP_LOGI(TAG, "Destroying DOA handle...");
+    afe_doa_destroy(this->doa_handle_);
+    this->doa_handle_ = nullptr;
+  }
+}
+
 void ESPSRDOA::setup() {
   ESP_LOGI(TAG, "========================================");
   ESP_LOGI(TAG, "ESP-SR DOA Component v2.1.0");
@@ -113,7 +121,7 @@ void ESPSRDOA::loop() {}
 
 void ESPSRDOA::dump_config() {
   ESP_LOGCONFIG(TAG, "ESP-SR DOA:");
-  ESP_LOGCONFIG(TAG, "  Version: v2.2.0 (Memory Optimized)");
+  ESP_LOGCONFIG(TAG, "  Version: v2.2.1 (Destructor + Memory Optimized)");
   ESP_LOGCONFIG(TAG, "  Build: %s %s", __DATE__, __TIME__);
   LOG_SENSOR("  ", "DOA", this->doa_sensor_);
 }

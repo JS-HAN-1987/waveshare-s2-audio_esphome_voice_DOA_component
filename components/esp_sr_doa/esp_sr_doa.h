@@ -12,6 +12,7 @@ namespace esp_sr_doa {
 
 class ESPSRDOA : public Component {
 public:
+  ~ESPSRDOA(); // Destructor for cleanup
   void setup() override;
   void loop() override;
   void dump_config() override;
