@@ -11,8 +11,6 @@
 // ESPHome's ESP_LOG* macros from esphome/core/log.h are used instead
 #endif
 
-#endif
-
 namespace esphome {
 namespace esp_sr_doa {
 
