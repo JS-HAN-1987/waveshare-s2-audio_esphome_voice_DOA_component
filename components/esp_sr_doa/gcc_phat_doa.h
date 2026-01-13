@@ -184,13 +184,14 @@ public:
     // Debug logging periodically
     static int log_cnt = 0;
     if (++log_cnt % 100 == 0) {
-      ESP_LOGI(DOA_TAG, "Energy: %.1f, Thresh: %.1f, Calibrated: %d",
-               avg_energy, this->noise_threshold_, this->calibrated_);
+      ESP_LOGI(DOA_TAG, "Energy: %.1f (L:%.1f, R:%.1f), Thresh: %.1f",
+               avg_energy, avg_energy_l, avg_energy_r, this->noise_threshold_);
     }
 
-    if (avg_energy < this->noise_threshold_) {
-      return false;
-    }
+    // BYPASSED THRESHOLD FOR DEBUGGING - ALWAYS PROCESS
+    // if (avg_energy < this->noise_threshold_) {
+    //   return false;
+    // }
 
     float res = this->process_doa_();
     if (std::isnan(res))
