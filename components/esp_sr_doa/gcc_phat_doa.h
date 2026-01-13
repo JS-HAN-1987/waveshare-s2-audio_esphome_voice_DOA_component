@@ -170,8 +170,8 @@ public:
         float avg_noise = this->calibration_sum_ / 50.0f;
         this->noise_threshold_ = avg_noise * 1.5f; // Reduced from 2.5
         // Ensure min threshold
-        if (this->noise_threshold_ < 20.0f)
-          this->noise_threshold_ = 20.0f; // Lowered clamp
+        if (this->noise_threshold_ < 50.0f)
+          this->noise_threshold_ = 50.0f; // Lowered clamp
 
         ESP_LOGI(DOA_TAG,
                  "Calibration Complete. Noise Floor: %.1f, Threshold: %.1f",
@@ -186,16 +186,17 @@ public:
     float avg_energy_r = energy_sum_right / (float)copy_len;
 
     // Debug logging periodically
-    static int log_cnt = 0;
-    if (++log_cnt % 100 == 0) {
-      ESP_LOGI(DOA_TAG, "Energy: %.1f (L:%.1f, R:%.1f), Thresh: %.1f",
-               avg_energy, avg_energy_l, avg_energy_r, this->noise_threshold_);
-    }
+    // static int log_cnt = 0;
+    // if (++log_cnt % 100 == 0) {
+    //  ESP_LOGI(DOA_TAG, "Energy: %.1f (L:%.1f, R:%.1f), Thresh: %.1f",
+    //           avg_energy, avg_energy_l, avg_energy_r,
+    //           this->noise_threshold_);
+    //}
 
     // BYPASSED THRESHOLD FOR DEBUGGING - ALWAYS PROCESS
-    // if (avg_energy < this->noise_threshold_) {
-    //   return false;
-    // }
+    if (avg_energy < this->noise_threshold_) {
+      return false;
+    }
 
     float res = this->process_doa_();
     if (std::isnan(res))
@@ -213,12 +214,12 @@ private:
 
   std::vector<float> gcc_accum_;
   int accum_count_ = 0;
-  static const int ACCUM_FRAMES = 2; // User requested 2 frames (Hyper fast)
+  static const int ACCUM_FRAMES = 60; // 60 frames * 16ms = 960ms (~1 sec)
 
   bool calibrated_ = false;
   float calibration_sum_ = 0.0f;
-  int calibration_count_ = 0;
-  float noise_threshold_ = 20.0f; // Lower default min threshold
+  int calibration_count_ = 50;
+  float noise_threshold_ = 50.0f; // Lower default min threshold
 
   float last_output_angle_ = 0.0f;
 
