@@ -60,6 +60,16 @@ void ESPSRDOA::feed_audio(const std::vector<uint8_t> &data) {
   // Just pass data directly (Assume L/R Interleaved 16-bit)
   const std::vector<uint8_t> &stereo_bytes = data;
 
+  // Debug: Log first 4 samples to verify content
+  // Expected: L0, R0, L1, R1... (All non-zero/active)
+  static int raw_log_cnt = 0;
+  if (++raw_log_cnt % 200 == 0) { // Throttle log
+    const int16_t *s = (const int16_t *)data.data();
+    if (data.size() >= 8) { // Ensure at least 4 samples
+      ESP_LOGI(TAG, "Input Samples: %d, %d, %d, %d", s[0], s[1], s[2], s[3]);
+    }
+  }
+
   // Delegate all processing to the shared engine with STEREO data
   if (this->doa_engine_.feed_audio(stereo_bytes, new_angle)) {
     // Only publish if interval passed (optional throttling)
