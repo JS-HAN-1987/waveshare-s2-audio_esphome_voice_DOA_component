@@ -205,8 +205,6 @@ private:
 
   std::vector<float> gcc_accum_;
   int accum_count_ = 0;
-  std::vector<float> gcc_accum_;
-  int accum_count_ = 0;
   static const int ACCUM_FRAMES = 5; // User requested 5 frames
 
   bool calibrated_ = false;
