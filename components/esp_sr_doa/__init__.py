@@ -27,9 +27,4 @@ async def to_code(config):
         sens = await sensor.new_sensor(config["doa"])
         cg.add(var.set_doa_sensor(sens))
 
-    # Use ESP-DSP from standard Git repo (pinned version to avoid build conflicts)
-    cg.add_library(
-        name="esp-dsp",
-        version="v1.4.4",
-        repository="https://github.com/espressif/esp-dsp.git"
-    )
+
