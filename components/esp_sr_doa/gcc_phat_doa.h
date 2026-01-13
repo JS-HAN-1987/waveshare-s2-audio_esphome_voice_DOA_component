@@ -165,8 +165,8 @@ public:
         float avg_noise = this->calibration_sum_ / 50.0f;
         this->noise_threshold_ = avg_noise * 1.5f; // Reduced from 2.5
         // Ensure min threshold
-        if (this->noise_threshold_ < 50.0f)
-          this->noise_threshold_ = 50.0f;
+        if (this->noise_threshold_ < 20.0f)
+          this->noise_threshold_ = 20.0f; // Lowered clamp
 
         ESP_LOGI(DOA_TAG,
                  "Calibration Complete. Noise Floor: %.1f, Threshold: %.1f",
@@ -205,12 +205,14 @@ private:
 
   std::vector<float> gcc_accum_;
   int accum_count_ = 0;
-  static const int ACCUM_FRAMES = 10;
+  std::vector<float> gcc_accum_;
+  int accum_count_ = 0;
+  static const int ACCUM_FRAMES = 5; // User requested 5 frames
 
   bool calibrated_ = false;
   float calibration_sum_ = 0.0f;
   int calibration_count_ = 0;
-  float noise_threshold_ = 200.0f;
+  float noise_threshold_ = 20.0f; // Lower default min threshold
 
   float last_output_angle_ = 0.0f;
 
