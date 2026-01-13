@@ -154,12 +154,23 @@ public:
 
     // Calibration Logic
     if (!this->calibrated_) {
+      // Warmup: Skip first 50 frames to avoid boot pops/glitches
+      static int warmup = 0;
+      if (warmup++ < 50)
+        return false;
+
       this->calibration_sum_ += energy_sum / (float)copy_len;
       this->calibration_count_++;
       if (this->calibration_count_ > 50) {
-        this->noise_threshold_ = (this->calibration_sum_ / 50.0f) * 2.5f;
-        ESP_LOGI(DOA_TAG, "Calibration Complete. Threshold: %.1f",
-                 this->noise_threshold_);
+        float avg_noise = this->calibration_sum_ / 50.0f;
+        this->noise_threshold_ = avg_noise * 1.5f; // Reduced from 2.5
+        // Ensure min threshold
+        if (this->noise_threshold_ < 50.0f)
+          this->noise_threshold_ = 50.0f;
+
+        ESP_LOGI(DOA_TAG,
+                 "Calibration Complete. Noise Floor: %.1f, Threshold: %.1f",
+                 avg_noise, this->noise_threshold_);
         this->calibrated_ = true;
       }
       return false;
