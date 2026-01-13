@@ -1,28 +1,24 @@
 #pragma once
 
-#include "esp_err.h"
-#include "esp_log.h"
+#include "esphome/core/log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include <algorithm>
 #include <cmath>
+#include <complex>
 #include <cstring>
 #include <vector>
 
-#if __has_include("dsps_fft2r.h")
-#include "dsps_fft2r.h"
-#include "dsps_wind_hann.h"
-#else
-#endif
+
+namespace esphome {
+namespace esp_sr_doa {
+
+static const char *TAG = "GccPhatDoa";
 
 // Constants
-static const char *DOA_TAG = "GccPhatDoa";
 static const int FFT_N = 512;
+static const float MIC_DISTANCE = 0.045f;
 static const int SAMPLE_RATE = 16000;
-static const float MIC_DISTANCE = 0.040f;
-static const float SPEED_OF_SOUND = 343.0f;
-
-// ========================================================================
-// FFT Size
-static const int FFT_N = 512;
-// Speed of Sound
 static const float SOUND_SPEED = 343.0f;
 
 // ---------------------------------------------
@@ -66,7 +62,7 @@ public:
           int j = i + mmax;
           float tr = wr * data[2 * j] - wi * data[2 * j + 1];
           float ti =
-              wr * data[2 * j + 1] + wi * data[2 * j]; // Fixed: wpi -> wi
+              wr * data[2 * j + 1] + wi * data[2 * j]; // Fixed sign convention
 
           data[2 * j] = data[2 * i] - tr;
           data[2 * j + 1] = data[2 * i + 1] - ti;
@@ -81,404 +77,252 @@ public:
   }
 
   static void ifft(std::vector<float> &data) {
-    int n = data.size(); // Total floats
+    int n = data.size();
     // Conjugate input
     for (int i = 1; i < n; i += 2) {
       data[i] = -data[i];
     }
-    static void fft(std::vector<float> & data) {
-      int n = data.size() / 2; // Complex pairs
-      if (n < 2)
-        return;
 
-      // Bit Reverse implementation
-      int j = 0;
-      for (int i = 0; i < n; i++) {
-        if (j > i) {
-          std::swap(data[2 * i], data[2 * j]);
-          std::swap(data[2 * i + 1], data[2 * j + 1]);
-        }
-        int m = n >> 1;
-        while (m >= 1 && j >= m) {
-          j -= m;
-          m >>= 1;
-        }
-        j += m;
-      }
+    fft(data);
 
-      // Danielson-Lanczos
-      for (int mmax = 1; mmax < n; mmax <<= 1) {
-        int istep = mmax << 1;
-        float theta = -M_PI / mmax;
-        float wtemp = sin(0.5f * theta);
-        float wpr = -2.0f * wtemp * wtemp;
-        float wpi = sin(theta);
-        float wr = 1.0f;
-        float wi = 0.0f;
+    // Conjugate output and scale
+    float inv_N = 1.0f / (float)(n / 2);
 
-        for (int m = 0; m < mmax; m++) {
-          for (int i = m; i < n; i += istep) {
-            int j = i + mmax;
-            float tr = wr * data[2 * j] - wi * data[2 * j + 1];
-            float ti = wr * data[2 * j + 1] + wi * data[2 * j]; // Fixed formula
-
-            data[2 * j] = data[2 * i] - tr;
-            data[2 * j + 1] = data[2 * i + 1] - ti;
-            data[2 * i] += tr;
-            data[2 * i + 1] += ti;
-          }
-          wtemp = wr;
-          wr = wr * wpr - wi * wpi + wr;
-          wi = wi * wpr + wtemp * wpi + wi;
-        }
-      }
+    for (int i = 0; i < n; i += 2) {
+      data[i] *= inv_N;
+      data[i + 1] = -data[i + 1] * inv_N;
     }
+  }
+};
 
-    static void ifft(std::vector<float> & data) {
-      int n = data.size();
-      // Conjugate input (Imag = -Imag)
-      for (int i = 1; i < n; i += 2) {
-        data[i] = -data[i];
-      }
-
-      fft(data);
-
-      // Conjugate output again and scale by 1/N
-      // Size n is 2 * NumComplex
-      int complex_n = n / 2;
-      float inv_N = 1.0f / (float)complex_n;
-
-      for (int i = 0; i < n; i += 2) {
-        data[i] *= inv_N;                   // Real
-        data[i + 1] = -data[i + 1] * inv_N; // Imag (Conjugate)
-      }
-    }
+class GccPhatDoa {
+public:
+  enum Direction {
+    DIR_LEFT = -1,
+    DIR_CENTER = 0,
+    DIR_RIGHT = 1,
+    DIR_UNKNOWN = 99
   };
 
-  class GccPhatDoa {
-  public:
-    enum Direction {
-      DIR_LEFT = -1,
-      DIR_CENTER = 0,
-      DIR_RIGHT = 1,
-      DIR_UNKNOWN = 99
-    };
-    GccPhatDoa() {
-      this->fft_in_left_.resize(FFT_N * 2);
-      this->fft_in_right_.resize(FFT_N * 2);
-      this->fft_out_left_.resize(FFT_N * 2);
-      this->fft_out_right_.resize(FFT_N * 2);
-      this->gcc_accum_.assign(FFT_N * 2, 0.0f);
+  GccPhatDoa() {
+    this->fft_in_left_.resize(FFT_N * 2);
+    this->fft_in_right_.resize(FFT_N * 2);
+    this->fft_out_left_.resize(FFT_N * 2);
+    this->fft_out_right_.resize(FFT_N * 2);
+    this->gcc_accum_.resize(FFT_N * 2);
+    // Fill accum with 0
+    std::fill(this->gcc_accum_.begin(), this->gcc_accum_.end(), 0.0f);
+  }
+
+  bool setup() {
+    // No specific initialization needed for SimpleFFT
+    return true;
+  }
+
+  // Input: Stereo Int16 buffer
+  bool feed_audio(const std::vector<uint8_t> &data, float &out_angle) {
+    if (data.size() % 4 != 0)
+      return false;
+
+    int num_samples = data.size() / sizeof(int16_t);
+    int num_frames = num_samples / 2;
+    const int16_t *pcm = (const int16_t *)data.data();
+
+    // Use shorter length if data is smaller than FFT
+    int copy_len = std::min(num_frames, FFT_N);
+
+    // Clear buffers
+    std::fill(this->fft_in_left_.begin(), this->fft_in_left_.end(), 0.0f);
+    std::fill(this->fft_in_right_.begin(), this->fft_in_right_.end(), 0.0f);
+
+    float energy_sum = 0.0f;
+
+    for (int i = 0; i < copy_len; i++) {
+      float l_val = (float)pcm[2 * i];
+      float r_val = (float)pcm[2 * i + 1];
+
+      // Hanning Window
+      float window = 0.5f * (1.0f - cosf(2.0f * M_PI * i / (FFT_N - 1)));
+
+      this->fft_in_left_[i * 2] = l_val * window;
+      this->fft_in_left_[i * 2 + 1] = 0.0f;
+
+      this->fft_in_right_[i * 2] = r_val * window;
+      this->fft_in_right_[i * 2 + 1] = 0.0f;
+
+      energy_sum += fabsf(l_val) + fabsf(r_val);
     }
 
-    bool setup() {
-      // No initialization needed for internal FFT
-      return true;
-    }
-
-    // Input: Stereo Int16 buffer
-    bool feed_audio(const std::vector<uint8_t> &data, float &out_angle) {
-      float res = this->process_doa_();
-      this->buffer_pos_ = 0;
-      if (!std::isnan(res)) {
-        out_angle = res;
-        updated = true;
+    // Calibration Logic
+    if (!this->calibrated_) {
+      this->calibration_sum_ += energy_sum / (float)copy_len;
+      this->calibration_count_++;
+      if (this->calibration_count_ > 50) {
+        this->noise_threshold_ = (this->calibration_sum_ / 50.0f) * 2.5f;
+        ESP_LOGI(TAG, "Calibration Complete. Threshold: %.1f",
+                 this->noise_threshold_);
+        this->calibrated_ = true;
       }
+      return false;
     }
-  } return updated;
-}
 
-// 방향 문자열 얻기 (편의 함수)
-static const char *
-get_direction_str(float angle) {
-  if (angle < -15.0f)
-    return "LEFT";
-  else if (angle > 15.0f)
-    return "RIGHT";
-  else
-    return "CENTER";
-}
+    if (energy_sum / (float)copy_len < this->noise_threshold_) {
+      return false;
+    }
+
+    float res = this->process_doa_();
+    if (std::isnan(res))
+      return false;
+
+    out_angle = res;
+    return true;
+  }
 
 private:
-int16_t mic_buffer_[FFT_N * 2];
-size_t buffer_pos_{0};
-float fft_input_left_[FFT_N * 2];
-float fft_input_right_[FFT_N * 2];
-float fft_out_left_[FFT_N * 2];
-float window_[FFT_N];
+  std::vector<float> fft_in_left_;
+  std::vector<float> fft_in_right_;
+  std::vector<float> fft_out_left_;
+  std::vector<float> fft_out_right_;
 
-float last_output_angle_{0.0f};
-uint32_t last_output_time_ms_{0};
-
-// 노이즈 캘리브레이션
-float noise_threshold_{50.0f};
-float calib_energy_left_{0.0f};
-float calib_energy_right_{0.0f};
-bool is_calibrated_{false};
-int calibration_count_{0};
-float calibration_sum_left_{0.0f};
-float calibration_sum_right_{0.0f};
-static const int CALIBRATION_FRAMES = 30;
-
-// 투표 시스템: 방향별 투표 수
-int vote_left_{0};
-int vote_right_{0};
-int vote_center_{0};
-int total_votes_{0};
-
-// 최소 출력 간격 (밀리초) - 약 1Hz
-static const uint32_t MIN_OUTPUT_INTERVAL_MS = 800;
-// 결정에 필요한 최소 투표 수
-static const int MIN_VOTES_FOR_DECISION = 10; // ~500ms 분량
-
-float process_doa_() {
-  // ===== 1단계: 양 채널 에너지 계산 (절대값 합) =====
-  float energy_left = 0.0f;
-  float energy_right = 0.0f;
-  for (int i = 0; i < FFT_N; i++) {
-    energy_left += std::abs(this->mic_buffer_[i * 2]);
-    energy_right += std::abs(this->mic_buffer_[i * 2 + 1]);
-  }
-  energy_left /= FFT_N;
-  energy_right /= FFT_N;
-
-  // ===== 2단계: 노이즈 캘리브레이션 =====
-  if (!this->is_calibrated_) {
-    this->calibration_sum_left_ += energy_left;
-    this->calibration_sum_right_ += energy_right;
-    this->calibration_count_++;
-
-    if (this->calibration_count_ >= CALIBRATION_FRAMES) {
-      this->calib_energy_left_ =
-          this->calibration_sum_left_ / this->calibration_count_;
-      this->calib_energy_right_ =
-          this->calibration_sum_right_ / this->calibration_count_;
-
-      // 노이즈 바닥의 2배 + 약간의 마진 for VAD threshold
-      float avg_noise =
-          (this->calib_energy_left_ + this->calib_energy_right_) / 2.0f;
-      this->noise_threshold_ = avg_noise * 1.5f + 10.0f;
-
-      ESP_LOGI(DOA_TAG,
-               "Calibration Complete. Left: %.1f, Right: %.1f, Threshold: %.1f",
-               this->calib_energy_left_, this->calib_energy_right_,
-               this->noise_threshold_);
-      this->is_calibrated_ = true;
-    }
-    return NAN;
-  }
-
-  // ===== 3단계: 음성 활성화 감지 (VAD) =====
-  // 단순히 에너지 레벨로만 체크
-  bool is_voice_active = (energy_left > this->noise_threshold_) ||
-                         (energy_right > this->noise_threshold_);
-
-  if (!is_voice_active) {
-    // 음성이 없으면 투표하지 않음
-    return NAN;
-  }
-
-  // ===== 4단계: GCC-PHAT로 시간차 계산 (다시 활성화) =====
-  // De-interleave + Window
-  for (int i = 0; i < FFT_N; i++) {
-    this->fft_input_left_[i * 2 + 0] =
-        (float)this->mic_buffer_[i * 2] * this->window_[i];
-    this->fft_input_left_[i * 2 + 1] = 0;
-    this->fft_input_right_[i * 2 + 0] =
-        (float)this->mic_buffer_[i * 2 + 1] * this->window_[i];
-    this->fft_input_right_[i * 2 + 1] = 0;
-  }
-
-  // FFT
-  dsps_fft2r_fc32(this->fft_input_left_, FFT_N);
-  dsps_fft2r_fc32(this->fft_input_right_, FFT_N);
-  dsps_bit_rev_fc32(this->fft_input_left_, FFT_N);
-  dsps_bit_rev_fc32(this->fft_input_right_, FFT_N);
-
-  // GCC-PHAT: Cross-correlation in frequency domain
-  for (int i = 0; i < FFT_N; i++) {
-    float r1 = this->fft_input_left_[i * 2];
-    float i1 = this->fft_input_left_[i * 2 + 1];
-    float r2 = this->fft_input_right_[i * 2];
-    float i2 = this->fft_input_right_[i * 2 + 1];
-
-    // X1 * conj(X2)
-    float pr = r1 * r2 + i1 * i2;
-    float pi = i1 * r2 - r1 * i2;
-    float mag = sqrtf(pr * pr + pi * pi) + 1e-6f;
-
-    this->fft_out_left_[i * 2] = pr / mag;
-    this->fft_out_left_[i * 2 + 1] = pi / mag;
-  }
-
-  // ===== Frequency Masking (Band-pass) =====
-  // 4cm 간격 마이크의 앨리어싱 한계(Spatial Aliasing)는 약 4.2kHz입니다.
-  // 또한 음성 대역 밖의 노이즈가 시간차 계산을 방해할 수 있습니다.
-  // 200Hz ~ 3500Hz 대역만 사용하여 안정성을 높입니다.
-  // Resolution: 16000 / 512 = 31.25 Hz/bin
-  // Min Bin: 200 / 31.25 = ~6
-  // Max Bin: 3500 / 31.25 = ~112
-
-  // DC ~ 200Hz 삭제
-  for (int i = 0; i < 6; i++) {
-    this->fft_out_left_[i * 2] = 0;
-    this->fft_out_left_[i * 2 + 1] = 0;
-  }
-  // 3500Hz ~ Nyquist 삭제
-  for (int i = 112; i < FFT_N / 2;
-       i++) { // 절반까지만 유효한 데이터 (Real FFT 고려 시)
-    // dsps_fft2r_fc32는 Complex FFT이므로 전체 대역이 있지만,
-    // 오디오 신호는 실수이므로 대칭성을 가집니다.
-    // 여기서는 단순화를 위해 Positive Frequency 부분만 마스킹하고,
-    // (IFFT 결과에 영향을 주려면 대칭인 Negative Frequency 부분도 처리해야
-    // 하지만
-    //  GCC PHAT 구현체 특성상 Magnitude 정규화가 되어 있어
-    //  특정 대역만 살리는게 조금 까다로울 수 있음.
-    //  하지만 편의상 저주파/고주파 bin을 0으로 만드는 것만으로도 상당한
-    //  효과가 있음)
-
-    // Positive Freq
-    this->fft_out_left_[i * 2] = 0;
-    this->fft_out_left_[i * 2 + 1] = 0;
-
-    // Negative Freq (Symmetric)
-    int mirror_idx = FFT_N - i;
-    if (mirror_idx < FFT_N) {
-      this->fft_out_left_[mirror_idx * 2] = 0;
-      this->fft_out_left_[mirror_idx * 2 + 1] = 0;
-    }
-  }
-
-  // Mirror Low Cut (Negative side)
-  for (int i = 1; i < 6; i++) {
-    int mirror_idx = FFT_N - i;
-    this->fft_out_left_[mirror_idx * 2] = 0;
-    this->fft_out_left_[mirror_idx * 2 + 1] = 0;
-  }
-
-  // IFFT
-  dsps_fft2r_fc32(this->fft_out_left_, FFT_N);
-  dsps_bit_rev_fc32(this->fft_out_left_, FFT_N);
-
-  // ===== GCC Accumulation =====
-  // 프레임 단위의 결과는 노이즈에 취약하므로,
-  // 여러 프레임(예: 10프레임 = 약 320ms)의 상관관계를 누적하여 SNR을 높임.
-
-  // 초기화 체크
-  if (this->accum_count_ == 0) {
-    memset(this->gcc_accum_, 0, sizeof(this->gcc_accum_));
-  }
-
-  // 누적 (Magnitude는 어차피 정규화되어 있으므로 단순 합산)
-  for (int i = 0; i < FFT_N * 2; i++) {
-    this->gcc_accum_[i] += this->fft_out_left_[i];
-  }
-  this->accum_count_++;
-
-  // 충분히 쌓일 때까지 대기
+  std::vector<float> gcc_accum_;
+  int accum_count_ = 0;
   static const int ACCUM_FRAMES = 10;
-  if (this->accum_count_ < ACCUM_FRAMES) {
-    return NAN;
-  }
 
-  // ===== 5단계: 피크 찾기 (누적된 데이터 사용) =====
-  // 4cm 마이크 간격 @ 16kHz = 최대 ~1.87 샘플 지연
-  // 따라서 ±2 샘플만 검색
-  float max_val = -1e9f; // -infinite
-  int best_lag = 0;
+  bool calibrated_ = false;
+  float calibration_sum_ = 0.0f;
+  int calibration_count_ = 0;
+  float noise_threshold_ = 200.0f;
 
-  for (int lag = -2; lag <= 2; lag++) {
-    int idx = (lag < 0) ? (FFT_N + lag) : lag;
-    // 누적된 실수부 사용 (idx * 2)
-    // 평균을 낼 필요는 없음 (최대값의 위치만 중요하므로 합산값 그대로 사용)
-    float val = this->gcc_accum_[idx * 2];
-    if (val > max_val) {
-      max_val = val;
-      best_lag = lag;
+  float last_output_angle_ = 0.0f;
+
+  float process_doa_() {
+    this->fft_out_left_ = this->fft_in_left_;
+    this->fft_out_right_ = this->fft_in_right_;
+
+    SimpleFFT::fft(this->fft_out_left_);
+    SimpleFFT::fft(this->fft_out_right_);
+
+    // Freq Masking (200Hz - 3.5kHz)
+    int bin_min = 6;
+    int bin_max = 112;
+
+    for (int i = 0; i < FFT_N; i++) {
+      bool keep = false;
+      if ((i >= bin_min && i <= bin_max) ||
+          (i >= (FFT_N - bin_max) && i <= (FFT_N - bin_min))) {
+        keep = true;
+      }
+
+      if (!keep) {
+        this->fft_out_left_[i * 2] = 0;
+        this->fft_out_left_[i * 2 + 1] = 0;
+        this->fft_out_right_[i * 2] = 0;
+        this->fft_out_right_[i * 2 + 1] = 0;
+      }
     }
-  }
 
-  // ===== 6단계: 피크 보간 (Quadratic Interpolation) =====
-  // 이웃 값 가져오기
-  auto get_val = [&](int offset) -> float {
-    int idx = (offset < 0) ? (FFT_N + offset) : offset;
-    return this->gcc_accum_[idx * 2];
-  };
+    // GCC-PHAT
+    for (int i = 0; i < FFT_N; i++) {
+      float lr = this->fft_out_left_[i * 2];
+      float li = this->fft_out_left_[i * 2 + 1];
+      float rr = this->fft_out_right_[i * 2];
+      float ri = this->fft_out_right_[i * 2 + 1];
 
-  float val_curr = max_val;
-  float val_prev = get_val(best_lag - 1);
-  float val_next = get_val(best_lag + 1);
+      // Complex Mul: L * Conj(R)
+      float xr = lr * rr + li * ri; // Real
+      float xi = li * rr - lr * ri; // Imag
 
-  // Quadratic Interpolation
-  float denom = 2.0f * (val_prev - 2.0f * val_curr + val_next);
-  float delta = 0.0f;
+      float mag = sqrtf(xr * xr + xi * xi);
+      if (mag > 1e-9f) {
+        xr /= mag;
+        xi /= mag;
+      }
 
-  if (std::abs(denom) > 1e-6f) {
-    delta = (val_prev - val_next) / denom;
-  }
+      this->fft_out_left_[i * 2] = xr;
+      this->fft_out_left_[i * 2 + 1] = xi;
+    }
 
-  // 보정된 Lag
-  float true_lag = (float)best_lag + delta;
+    SimpleFFT::ifft(this->fft_out_left_);
 
-  if (true_lag > 2.0f)
-    true_lag = 2.0f;
-  if (true_lag < -2.0f)
-    true_lag = -2.0f;
+    // Accumulate Real part
+    for (int i = 0; i < FFT_N; i++) {
+      // Real part is at 2*i. Note: gcc_accum_ is size FFT_N * 2 but we only
+      // strictly necessarily need size FFT_N for real GCC. But for simplicity
+      // of indexing let's just use the same size and access 2*i? Actually,
+      // let's just accumulate into linear indices to save space/logic if we
+      // wanted, but let's stick to the 2*i indexing to match the buffer
+      // structure if that's what we allocated. Wait, I allocated FFT_N * 2
+      this->gcc_accum_[i * 2] += this->fft_out_left_[i * 2];
+    }
+    this->accum_count_++;
 
-  // ===== 7단계: 각도 변환 =====
-  float lag_dist_m = true_lag * SPEED_OF_SOUND / (float)SAMPLE_RATE;
-  float sin_val = lag_dist_m / MIC_DISTANCE;
+    if (this->accum_count_ < ACCUM_FRAMES) {
+      return NAN;
+    }
 
-  if (sin_val > 1.0f)
-    sin_val = 1.0f;
-  if (sin_val < -1.0f)
-    sin_val = -1.0f;
+    // Peak Finding
+    int search_wnd = 10;
+    float max_val = -1e9f;
+    int best_lag = 0;
 
-  float angle_rad = asinf(sin_val);
-  float angle_deg = angle_rad * 180.0f / (float)M_PI;
+    // Helper lambda for wrapping index
+    auto get_lag_val = [&](int lag) -> float {
+      int idx;
+      if (lag < 0)
+        idx = FFT_N + lag;
+      else
+        idx = lag;
+      return this->gcc_accum_[idx * 2];
+    };
 
-  // 방향 보정
-  // 하드웨어 배치상 "오른쪽" 소리가 "Positive Lag"를 발생시킴 (Ch1=R, Ch3=L
-  // 추정) 따라서 Lag > 0 이면 Positive Angle(Right)이 되어야 함. 기존의
-  // -angle_deg 반전을 제거. 또한 4cm의 좁은 간격과 회절 효과로 각도가
-  // 과소평가되는 경향이 있어 보정(1.5배)
+    for (int k = -search_wnd; k <= search_wnd; k++) {
+      float val = get_lag_val(k);
+      if (val > max_val) {
+        max_val = val;
+        best_lag = k;
+      }
+    }
 
-  // 90도 클리핑
-  if (angle_deg > 90.0f)
-    angle_deg = 90.0f;
-  if (angle_deg < -90.0f)
-    angle_deg = -90.0f;
+    // Quadratic Interpolation
+    float val_prev = get_lag_val(best_lag - 1);
+    float val_curr = max_val;
+    float val_next = get_lag_val(best_lag + 1);
 
-  // ===== 8단계: 스무딩 (Exponential Moving Average) =====
-  // 누적을 이미 했으므로 Alpha를 좀 더 민감하게 설정 (0.2 -> 0.6)
-  // 반응성을 높임 (이미 300ms 지연되었으므로)
-  const float alpha = 0.6f;
+    float denom = 2.0f * (val_prev - 2.0f * val_curr + val_next);
+    float delta = 0.0f;
+    if (std::abs(denom) > 1e-6f) {
+      delta = (val_prev - val_next) / denom;
+    }
 
-  if (std::abs(this->last_output_angle_) < 0.001f &&
-      this->last_output_time_ms_ == 0) {
-    this->last_output_angle_ = angle_deg;
-  } else {
+    float true_lag = (float)best_lag + delta;
+
+    // Clear accumulator
+    std::fill(this->gcc_accum_.begin(), this->gcc_accum_.end(), 0.0f);
+    this->accum_count_ = 0;
+
+    // Lag to Angle
+    // Fs = 16000. True Lag is in samples.
+    // Time delay = true_lag / Fs
+    // Sin(theta) = Time delay * Speed / MicDist
+    float tau = true_lag / (float)SAMPLE_RATE;
+    float sin_val = (tau * SOUND_SPEED) / MIC_DISTANCE;
+
+    if (sin_val > 1.0f)
+      sin_val = 1.0f;
+    if (sin_val < -1.0f)
+      sin_val = -1.0f;
+
+    float angle_rad = asinf(sin_val);
+    float angle_deg = angle_rad * 180.0f / (float)M_PI;
+
+    // EMA Smoothing
+    float alpha = 0.6f;
     this->last_output_angle_ =
         (alpha * angle_deg) + ((1.0f - alpha) * this->last_output_angle_);
+
+    return this->last_output_angle_;
   }
+};
 
-  this->last_output_time_ms_ = 1;
-
-  // 리셋
-  this->accum_count_ = 0;
-
-  // 로그 항상 출력 (업데이트 시점)
-  ESP_LOGI(DOA_TAG, "Lag: %.2f (Int:%d) -> Raw: %.1f deg -> Smooth: %.1f deg",
-           true_lag, best_lag, angle_deg, this->last_output_angle_);
-
-  return this->last_output_angle_;
-}
-
-// New Members for Accumulation
-float gcc_accum_[FFT_N * 2];
-int accum_count_{0};
-
-// Clean up: Reset function not needed for voting anymore
-void reset_votes_() {}
-}
-;
+} // namespace esp_sr_doa
+} // namespace esphome

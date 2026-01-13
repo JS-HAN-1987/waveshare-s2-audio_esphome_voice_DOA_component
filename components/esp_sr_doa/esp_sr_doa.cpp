@@ -30,7 +30,7 @@ void ESPSRDOA::dump_config() {
 }
 
 void ESPSRDOA::feed_audio(const std::vector<uint8_t> &data) {
-  uint32_t now = millis();
+  uint32_t now = esphome::millis();
   float new_angle = 0.0f;
 
   // Hardcoded fix for ESP32-S3-Box-3 (or similar 4ch hardware)
