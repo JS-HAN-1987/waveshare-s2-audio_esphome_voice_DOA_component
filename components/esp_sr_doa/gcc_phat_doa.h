@@ -134,7 +134,10 @@ public:
     std::fill(this->fft_in_left_.begin(), this->fft_in_left_.end(), 0.0f);
     std::fill(this->fft_in_right_.begin(), this->fft_in_right_.end(), 0.0f);
 
-    float energy_sum = 0.0f;
+    float energy_sum =
+        0.0f; // Kept for logic compatibility but calculated from components
+    float energy_sum_left = 0.0f;
+    float energy_sum_right = 0.0f;
 
     for (int i = 0; i < copy_len; i++) {
       float l_val = (float)pcm[2 * i];
