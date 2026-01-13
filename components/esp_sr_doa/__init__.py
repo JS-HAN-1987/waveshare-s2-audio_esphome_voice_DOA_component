@@ -27,9 +27,8 @@ async def to_code(config):
         sens = await sensor.new_sensor(config["doa"])
         cg.add(var.set_doa_sensor(sens))
 
-    # Use ESP-DSP for Custom GCC-PHAT
+    # Use ESP-DSP from PlatformIO Registry (Packaged version)
     cg.add_library(
-        name="esp-dsp",
-        version="master",
-        repository="https://github.com/espressif/esp-dsp"
+        name="espressif/esp-dsp",
+        version="*",
     )
