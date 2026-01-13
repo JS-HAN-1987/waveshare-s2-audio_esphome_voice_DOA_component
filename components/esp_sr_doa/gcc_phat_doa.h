@@ -159,15 +159,15 @@ public:
 
     // Calibration Logic
     if (!this->calibrated_) {
-      // Warmup: Skip first 10 frames (Short warmup)
+      // Warmup: Skip first 50 frames to avoid boot pops/glitches
       static int warmup = 0;
-      if (warmup++ < 10)
+      if (warmup++ < 50)
         return false;
 
       this->calibration_sum_ += energy_sum / (float)copy_len;
       this->calibration_count_++;
-      if (this->calibration_count_ > 3) {
-        float avg_noise = this->calibration_sum_ / 3.0f;
+      if (this->calibration_count_ > 50) {
+        float avg_noise = this->calibration_sum_ / 50.0f;
         this->noise_threshold_ = avg_noise * 1.5f; // Reduced from 2.5
         // Ensure min threshold
         if (this->noise_threshold_ < 20.0f)
