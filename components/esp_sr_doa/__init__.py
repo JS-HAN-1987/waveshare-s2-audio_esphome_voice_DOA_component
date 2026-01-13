@@ -28,8 +28,8 @@ async def to_code(config):
         cg.add(var.set_doa_sensor(sens))
 
     # Use ESP-DSP for Custom GCC-PHAT
-    cg.add_idf_component(
+    cg.add_library(
         name="esp-dsp",
-        source="github://espressif/esp-dsp",
-        ref="master",
+        version="master",
+        repository="https://github.com/espressif/esp-dsp"
     )
