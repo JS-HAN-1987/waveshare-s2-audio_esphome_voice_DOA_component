@@ -165,7 +165,16 @@ public:
       return false;
     }
 
-    if (energy_sum / (float)copy_len < this->noise_threshold_) {
+    float avg_energy = energy_sum / (float)copy_len;
+
+    // Debug logging periodically
+    static int log_cnt = 0;
+    if (++log_cnt % 100 == 0) {
+      ESP_LOGI(DOA_TAG, "Energy: %.1f, Thresh: %.1f, Calibrated: %d",
+               avg_energy, this->noise_threshold_, this->calibrated_);
+    }
+
+    if (avg_energy < this->noise_threshold_) {
       return false;
     }
 
