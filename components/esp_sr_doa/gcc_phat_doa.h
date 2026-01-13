@@ -153,6 +153,8 @@ public:
       this->fft_in_right_[i * 2 + 1] = 0.0f;
 
       energy_sum += fabsf(l_val) + fabsf(r_val);
+      energy_sum_left += fabsf(l_val);
+      energy_sum_right += fabsf(r_val);
     }
 
     // Calibration Logic
@@ -180,6 +182,8 @@ public:
     }
 
     float avg_energy = energy_sum / (float)copy_len;
+    float avg_energy_l = energy_sum_left / (float)copy_len;
+    float avg_energy_r = energy_sum_right / (float)copy_len;
 
     // Debug logging periodically
     static int log_cnt = 0;
