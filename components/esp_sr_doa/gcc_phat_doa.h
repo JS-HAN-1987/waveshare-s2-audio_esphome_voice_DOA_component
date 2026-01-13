@@ -154,15 +154,15 @@ public:
 
     // Calibration Logic
     if (!this->calibrated_) {
-      // Warmup: Skip first 50 frames to avoid boot pops/glitches
+      // Warmup: Skip first 10 frames (Short warmup)
       static int warmup = 0;
-      if (warmup++ < 50)
+      if (warmup++ < 10)
         return false;
 
       this->calibration_sum_ += energy_sum / (float)copy_len;
       this->calibration_count_++;
-      if (this->calibration_count_ > 50) {
-        float avg_noise = this->calibration_sum_ / 50.0f;
+      if (this->calibration_count_ > 3) {
+        float avg_noise = this->calibration_sum_ / 3.0f;
         this->noise_threshold_ = avg_noise * 1.5f; // Reduced from 2.5
         // Ensure min threshold
         if (this->noise_threshold_ < 20.0f)
@@ -205,7 +205,7 @@ private:
 
   std::vector<float> gcc_accum_;
   int accum_count_ = 0;
-  static const int ACCUM_FRAMES = 5; // User requested 5 frames
+  static const int ACCUM_FRAMES = 2; // User requested 2 frames (Hyper fast)
 
   bool calibrated_ = false;
   float calibration_sum_ = 0.0f;
