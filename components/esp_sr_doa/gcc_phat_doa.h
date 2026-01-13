@@ -158,7 +158,7 @@ public:
       this->calibration_count_++;
       if (this->calibration_count_ > 50) {
         this->noise_threshold_ = (this->calibration_sum_ / 50.0f) * 2.5f;
-        ESP_LOGI(TAG, "Calibration Complete. Threshold: %.1f",
+        ESP_LOGI(DOA_TAG, "Calibration Complete. Threshold: %.1f",
                  this->noise_threshold_);
         this->calibrated_ = true;
       }
