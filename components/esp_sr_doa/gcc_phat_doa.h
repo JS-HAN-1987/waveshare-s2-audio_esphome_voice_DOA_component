@@ -170,8 +170,8 @@ public:
         float avg_noise = this->calibration_sum_ / 50.0f;
         this->noise_threshold_ = avg_noise * 1.5f; // Reduced from 2.5
         // Ensure min threshold
-        if (this->noise_threshold_ < 50.0f)
-          this->noise_threshold_ = 50.0f; // Lowered clamp
+        if (this->noise_threshold_ > 50.0f)
+          this->noise_threshold_ = 50.0f; // uppered clamp
 
         ESP_LOGI(DOA_TAG,
                  "Calibration Complete. Noise Floor: %.1f, Threshold: %.1f",
@@ -219,7 +219,7 @@ private:
   bool calibrated_ = false;
   float calibration_sum_ = 0.0f;
   int calibration_count_ = 50;
-  float noise_threshold_ = 50.0f; // Lower default min threshold
+  float noise_threshold_ = 50.0f; // Upper default max threshold
 
   float last_output_angle_ = 0.0f;
 
