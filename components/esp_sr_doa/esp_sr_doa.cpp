@@ -1,6 +1,8 @@
 #include "esp_sr_doa.h"
 #include "esp_timer.h"
+#include "esphome/core/hal.h"
 #include "esphome/core/log.h"
+
 
 namespace esphome {
 namespace esp_sr_doa {

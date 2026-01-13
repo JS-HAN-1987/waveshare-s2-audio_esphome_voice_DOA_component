@@ -9,11 +9,10 @@
 #include <cstring>
 #include <vector>
 
-
 namespace esphome {
 namespace esp_sr_doa {
 
-static const char *TAG = "GccPhatDoa";
+static const char *DOA_TAG = "GccPhatDoa";
 
 // Constants
 static const int FFT_N = 512;
