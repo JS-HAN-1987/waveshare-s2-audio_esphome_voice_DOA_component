@@ -3,7 +3,6 @@
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 
-
 namespace esphome {
 namespace esp_sr_doa {
 
@@ -38,27 +37,28 @@ void ESPSRDOA::feed_audio(const std::vector<uint8_t> &data) {
   // Hardcoded fix for ESP32-S3-Box-3 (or similar 4ch hardware)
   // Input `data` is 4-channel interleaved (Ref, Mic1, Ref, Mic2) or similar.
   // We need to extract Ch1 and Ch3 for the DOA engine (Stereo).
+  /*
+     NOTE: ESPHome 'microphone' component with channel: stereo generally
+     provides 2-channel interleaved (L, R) data already. The previous logic
+     assumed 4-channel TDM input which caused us to skip frames and read
+     incorrect channels (autocorrelation). We now pass the data directly as
+     Stereo.
+  */
 
-  const int16_t *raw_samples = (const int16_t *)data.data();
-  size_t total_samples = data.size() / sizeof(int16_t);
+  // const int16_t *raw_samples = (const int16_t *)data.data();
+  // size_t total_samples = data.size() / sizeof(int16_t);
 
-  // Create clean stereo buffer
-  // Ch1 (Idx 1), Ch3 (Idx 3) from 4-channel frame
-  std::vector<int16_t> stereo_samples;
-  stereo_samples.reserve(total_samples / 2);
+  // std::vector<int16_t> stereo_samples;
+  // stereo_samples.reserve(total_samples / 2);
+  // size_t frame_count = total_samples / 4;
 
-  // Safety check: ensure multiple of 4
-  size_t frame_count = total_samples / 4;
+  // for (size_t i = 0; i < frame_count; i++) {
+  //   stereo_samples.push_back(raw_samples[4 * i + 1]); // Ch1 (Left)
+  //   stereo_samples.push_back(raw_samples[4 * i + 3]); // Ch3 (Right)
+  // }
 
-  for (size_t i = 0; i < frame_count; i++) {
-    stereo_samples.push_back(raw_samples[4 * i + 1]); // Ch1 (Left)
-    stereo_samples.push_back(raw_samples[4 * i + 3]); // Ch3 (Right)
-  }
-
-  std::vector<uint8_t> stereo_bytes((uint8_t *)stereo_samples.data(),
-                                    (uint8_t *)stereo_samples.data() +
-                                        stereo_samples.size() *
-                                            sizeof(int16_t));
+  // Just pass data directly (Assume L/R Interleaved 16-bit)
+  const std::vector<uint8_t> &stereo_bytes = data;
 
   // Delegate all processing to the shared engine with STEREO data
   if (this->doa_engine_.feed_audio(stereo_bytes, new_angle)) {
